@@ -1,0 +1,138 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider   = "prisma-client"
+  output     = "../src/generated/prisma"
+  engineType = "client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ────────────────────────────────────────────
+// Enums
+// ────────────────────────────────────────────
+
+enum Role {
+  SALES
+  MANAGER
+  ADMIN
+}
+
+// ────────────────────────────────────────────
+// Models
+// ────────────────────────────────────────────
+
+model User {
+  id           Int           @id @default(autoincrement())
+  name         String
+  email        String        @unique
+  passwordHash String        @map("password_hash")
+  role         Role          @default(SALES)
+  department   String?
+  createdAt    DateTime      @default(now()) @map("created_at")
+
+  dailyReports DailyReport[]
+  comments     Comment[]
+
+  @@map("users")
+}
+
+model Customer {
+  id           Int           @id @default(autoincrement())
+  companyName  String        @map("company_name")
+  contactName  String?       @map("contact_name")
+  phone        String?
+  address      String?
+  createdAt    DateTime      @default(now()) @map("created_at")
+
+  visitRecords VisitRecord[]
+
+  @@map("customers")
+}
+
+model DailyReport {
+  id         Int           @id @default(autoincrement())
+  reportDate DateTime      @map("report_date") @db.Date
+  createdAt  DateTime      @default(now()) @map("created_at")
+  updatedAt  DateTime      @updatedAt @map("updated_at")
+
+  userId     Int           @map("user_id")
+  // Restrict: 보고서 이력은 사용자 삭제 후에도 보존. 사용자 삭제 시 보고서를 먼저 처리해야 함
+  user       User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  visitRecords VisitRecord[]
+  problems     Problem[]
+  plans        Plan[]
+
+  @@unique([userId, reportDate])
+  @@map("daily_reports")
+}
+
+model VisitRecord {
+  id           Int         @id @default(autoincrement())
+  visitContent String      @map("visit_content") @db.Text
+  visitTime    String?     @map("visit_time") @db.VarChar(5)
+
+  reportId     Int         @map("report_id")
+  report       DailyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  customerId   Int         @map("customer_id")
+  // Restrict: 방문 이력은 고객 삭제 후에도 보존되어야 하는 이력 데이터
+  customer     Customer    @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  @@map("visit_records")
+}
+
+model Problem {
+  id        Int         @id @default(autoincrement())
+  content   String      @db.Text
+  sortOrder Int         @default(0) @map("sort_order")
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  reportId  Int         @map("report_id")
+  report    DailyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  comments  Comment[]
+
+  @@map("problems")
+}
+
+model Plan {
+  id        Int         @id @default(autoincrement())
+  content   String      @db.Text
+  sortOrder Int         @default(0) @map("sort_order")
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  reportId  Int         @map("report_id")
+  report    DailyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  comments  Comment[]
+
+  @@map("plans")
+}
+
+model Comment {
+  id        Int      @id @default(autoincrement())
+  content   String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  authorId  Int      @map("author_id")
+  // Restrict: 댓글 작성자 삭제 시 처리 정책은 소프트 삭제 도입 전까지 명시적으로 제한
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Restrict)
+
+  // problemId / planId 중 반드시 하나만 non-null이어야 함 (XOR).
+  // Prisma 스키마에서 CHECK 제약을 직접 지원하지 않으므로,
+  // 마이그레이션 SQL에서 수동으로 추가 예정 (이슈 #2):
+  //   ALTER TABLE comments ADD CONSTRAINT chk_comment_single_parent
+  //   CHECK ((problem_id IS NULL) != (plan_id IS NULL));
+  problemId Int?     @map("problem_id")
+  problem   Problem? @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  planId    Int?     @map("plan_id")
+  plan      Plan?    @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@map("comments")
+}
