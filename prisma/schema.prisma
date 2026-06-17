@@ -1,0 +1,130 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider   = "prisma-client"
+  output     = "../src/generated/prisma"
+  engineType = "client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ────────────────────────────────────────────
+// Enums
+// ────────────────────────────────────────────
+
+enum Role {
+  SALES
+  MANAGER
+  ADMIN
+}
+
+// ────────────────────────────────────────────
+// Models
+// ────────────────────────────────────────────
+
+model User {
+  id           Int           @id @default(autoincrement())
+  name         String
+  email        String        @unique
+  passwordHash String        @map("password_hash")
+  role         Role          @default(SALES)
+  department   String?
+  createdAt    DateTime      @default(now()) @map("created_at")
+
+  dailyReports DailyReport[]
+  comments     Comment[]
+
+  @@map("users")
+}
+
+model Customer {
+  id           Int           @id @default(autoincrement())
+  companyName  String        @map("company_name")
+  contactName  String?       @map("contact_name")
+  phone        String?
+  address      String?
+  createdAt    DateTime      @default(now()) @map("created_at")
+
+  visitRecords VisitRecord[]
+
+  @@map("customers")
+}
+
+model DailyReport {
+  id         Int           @id @default(autoincrement())
+  reportDate DateTime      @map("report_date") @db.Date
+  createdAt  DateTime      @default(now()) @map("created_at")
+  updatedAt  DateTime      @updatedAt @map("updated_at")
+
+  userId     Int           @map("user_id")
+  user       User          @relation(fields: [userId], references: [id])
+
+  visitRecords VisitRecord[]
+  problems     Problem[]
+  plans        Plan[]
+
+  @@unique([userId, reportDate])
+  @@map("daily_reports")
+}
+
+model VisitRecord {
+  id           Int         @id @default(autoincrement())
+  visitContent String      @map("visit_content") @db.Text
+  visitTime    String?     @map("visit_time") @db.VarChar(5)
+
+  reportId     Int         @map("report_id")
+  report       DailyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  customerId   Int         @map("customer_id")
+  customer     Customer    @relation(fields: [customerId], references: [id])
+
+  @@map("visit_records")
+}
+
+model Problem {
+  id        Int         @id @default(autoincrement())
+  content   String      @db.Text
+  sortOrder Int         @default(0) @map("sort_order")
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  reportId  Int         @map("report_id")
+  report    DailyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  comments  Comment[]
+
+  @@map("problems")
+}
+
+model Plan {
+  id        Int         @id @default(autoincrement())
+  content   String      @db.Text
+  sortOrder Int         @default(0) @map("sort_order")
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  reportId  Int         @map("report_id")
+  report    DailyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  comments  Comment[]
+
+  @@map("plans")
+}
+
+model Comment {
+  id        Int      @id @default(autoincrement())
+  content   String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  authorId  Int      @map("author_id")
+  author    User     @relation(fields: [authorId], references: [id])
+
+  problemId Int?     @map("problem_id")
+  problem   Problem? @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  planId    Int?     @map("plan_id")
+  plan      Plan?    @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@map("comments")
+}
